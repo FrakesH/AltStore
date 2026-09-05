@@ -17,12 +17,20 @@ jobs:
       - name: Use patched AltSign
         run: |
           rm -rf Dependencies/AltSign
-          git clone https://github.com/Calvin-Zikakis/AltSign.git Dependencies/AltSign
+
+          git clone --recursive https://github.com/Calvin-Zikakis/AltSign.git Dependencies/AltSign
+
           cd Dependencies/AltSign
+
           git checkout notarized
+
+          git submodule update --init --recursive
+
           git cherry-pick ec2968c
 
-      - name: Select Xcode
+          git submodule update --init --recursive
+
+      - name: Select Xcode 16
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '16.2'
