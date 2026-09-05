@@ -1,4 +1,5 @@
-name: Build AltServer + AltStore
+```yaml
+name: Build AltServer
 
 on:
   workflow_dispatch:
@@ -6,332 +7,61 @@ on:
 jobs:
   build:
     runs-on: macos-15
-
     steps:
-      # ------------------------------------------------------------
-      # Checkout AltStore + all submodules
-      # ------------------------------------------------------------
-      - name: Checkout
+      - name: Checkout with submodules
         uses: actions/checkout@v4
         with:
           submodules: recursive
-          fetch-depth: 0
 
-      # ------------------------------------------------------------
-      # Show repository state
-      # ------------------------------------------------------------
-      - name: Show repository state
+      - name: Apply AltSign authentication fixes
         run: |
-          echo "AltStore commit:"
-          git rev-parse HEAD
-
-          echo
-          echo "AltSign:"
-          cd Dependencies/AltSign
-          git rev-parse HEAD
-          git remote -v
-
-      # ------------------------------------------------------------
-      # Prepare AltSign
-      #
-      # Production fix:
-      #   PR #50:
-      #     3cd4a4a
-      #     67f90ce
-      #
-      #   PR #51:
-      #     ec2968c
-      #
-      # All three are applied to the notarized branch.
-      # ------------------------------------------------------------
-      - name: Patch AltSign
-        shell: bash
-        run: |
-          set -e
-
           cd Dependencies/AltSign
 
-          echo "=== AltSign repository ==="
-          git remote -v
+          git fetch --all
 
-          echo
-          echo "=== Fetch notarized branch ==="
-          git fetch origin notarized --force
-
-          echo
-          echo "=== Checkout notarized ==="
-          git checkout -B notarized origin/notarized
-
-          echo
-          echo "=== Current AltSign commit ==="
-          git rev-parse HEAD
-
-          echo
-          echo "=== Initialize AltSign submodules ==="
-          git submodule sync --recursive
-          git submodule update --init --recursive
-
-          echo
-          echo "=== Apply PR #50 + PR #51 ==="
+          git checkout notarized
 
           git cherry-pick 3cd4a4a1cafd588cab371e49609d19e694108430
           git cherry-pick 67f90ce182059fbd2369efb8274f61b6f3253e35
           git cherry-pick ec2968cf6a30be2a025be809641c64eade4570aa
 
-          echo
-          echo "=== Final AltSign commit ==="
+          echo "AltSign revision after patches:"
           git log -4 --oneline
 
-          echo
-          echo "=== AltSign submodules ==="
-          git submodule status --recursive
-
-      # ------------------------------------------------------------
-      # Select Xcode
-      # ------------------------------------------------------------
-      - name: Select Xcode 16.2
+      - name: Select Xcode 16
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '16.2'
 
-      # ------------------------------------------------------------
-      # CocoaPods
-      # ------------------------------------------------------------
-      - name: Install CocoaPods dependencies
-        shell: bash
+      - name: Install CocoaPods dependencies (if any)
         run: |
-          set -e
-
           if [ -f Podfile ]; then
             pod install --repo-update
-          else
-            echo "No Podfile found"
           fi
 
-      # ------------------------------------------------------------
-      # Show schemes
-      # ------------------------------------------------------------
-      - name: List available schemes
-        shell: bash
+      - name: List available schemes (diagnostic)
         run: |
-          set +e
+          xcodebuild -list -workspace AltStore.xcworkspace || xcodebuild -list -project AltStore.xcodeproj || true
 
-          if [ -f AltStore.xcworkspace/contents.xcworkspacedata ]; then
-            xcodebuild \
-              -list \
-              -workspace AltStore.xcworkspace
-          else
-            xcodebuild \
-              -list \
-              -project AltStore.xcodeproj
-          fi
-
-      # ------------------------------------------------------------
-      # Build AltServer
-      #
-      # IMPORTANT:
-      # macOS 27 Anisette fix is arm64-only, therefore we explicitly
-      # prevent Xcode from trying to link the x86_64 AltSign target.
-      # ------------------------------------------------------------
-      - name: Build AltServer
-        shell: bash
+      - name: Build AltServer (unsigned)
         run: |
-          set -e
+          xcodebuild -workspace AltStore.xcworkspace \
+            -scheme AltServer \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            build
 
-          if [ -f AltStore.xcworkspace/contents.xcworkspacedata ]; then
-            xcodebuild \
-              -workspace AltStore.xcworkspace \
-              -scheme AltServer \
-              -configuration Release \
-              -derivedDataPath build/AltServer \
-              -sdk macosx \
-              ARCHS=arm64 \
-              ONLY_ACTIVE_ARCH=YES \
-              CODE_SIGNING_ALLOWED=NO \
-              CODE_SIGN_IDENTITY="" \
-              CODE_SIGNING_REQUIRED=NO \
-              build
-          else
-            xcodebuild \
-              -project AltStore.xcodeproj \
-              -scheme AltServer \
-              -configuration Release \
-              -derivedDataPath build/AltServer \
-              -sdk macosx \
-              ARCHS=arm64 \
-              ONLY_ACTIVE_ARCH=YES \
-              CODE_SIGNING_ALLOWED=NO \
-              CODE_SIGN_IDENTITY="" \
-              CODE_SIGNING_REQUIRED=NO \
-              build
-          fi
-
-      # ------------------------------------------------------------
-      # Find AltServer.app
-      # ------------------------------------------------------------
-      - name: Locate AltServer.app
-        shell: bash
+      - name: Zip the app
         run: |
-          set -e
+          cd build/Build/Products/Release
+          zip -r AltServer.zip AltServer.app
 
-          find build/AltServer \
-            -type d \
-            -name "AltServer.app" \
-            -print
-
-      # ------------------------------------------------------------
-      # Build AltStore iOS
-      #
-      # This produces an unsigned iOS application which we package
-      # manually as an IPA.
-      # ------------------------------------------------------------
-      - name: Build AltStore iOS
-        shell: bash
-        run: |
-          set -e
-
-          if [ -f AltStore.xcworkspace/contents.xcworkspacedata ]; then
-            xcodebuild \
-              -workspace AltStore.xcworkspace \
-              -scheme AltStore \
-              -configuration Release \
-              -derivedDataPath build/AltStore-iOS \
-              -sdk iphoneos \
-              CODE_SIGNING_ALLOWED=NO \
-              CODE_SIGN_IDENTITY="" \
-              CODE_SIGNING_REQUIRED=NO \
-              build
-          else
-            xcodebuild \
-              -project AltStore.xcodeproj \
-              -scheme AltStore \
-              -configuration Release \
-              -derivedDataPath build/AltStore-iOS \
-              -sdk iphoneos \
-              CODE_SIGNING_ALLOWED=NO \
-              CODE_SIGN_IDENTITY="" \
-              CODE_SIGNING_REQUIRED=NO \
-              build
-          fi
-
-      # ------------------------------------------------------------
-      # Locate AltStore.app
-      # ------------------------------------------------------------
-      - name: Locate AltStore.app
-        shell: bash
-        run: |
-          set -e
-
-          find build/AltStore-iOS \
-            -type d \
-            -name "AltStore.app" \
-            -print
-
-      # ------------------------------------------------------------
-      # Create unsigned AltStore IPA
-      # ------------------------------------------------------------
-      - name: Package AltStore IPA
-        shell: bash
-        run: |
-          set -e
-
-          ALTSTORE_APP="$(find build/AltStore-iOS \
-            -type d \
-            -name "AltStore.app" \
-            -print -quit)"
-
-          if [ -z "$ALTSTORE_APP" ]; then
-            echo "ERROR: AltStore.app not found"
-            exit 1
-          fi
-
-          echo "Using:"
-          echo "$ALTSTORE_APP"
-
-          rm -rf build/IPA
-          mkdir -p build/IPA/Payload
-
-          cp -R "$ALTSTORE_APP" build/IPA/Payload/AltStore.app
-
-          cd build/IPA
-          zip -r ../AltStore.ipa Payload
-
-      # ------------------------------------------------------------
-      # Package AltServer
-      # ------------------------------------------------------------
-      - name: Package AltServer
-        shell: bash
-        run: |
-          set -e
-
-          ALTSERVER_APP="$(find build/AltServer \
-            -type d \
-            -name "AltServer.app" \
-            -print -quit)"
-
-          if [ -z "$ALTSERVER_APP" ]; then
-            echo "ERROR: AltServer.app not found"
-            exit 1
-          fi
-
-          echo "Using:"
-          echo "$ALTSERVER_APP"
-
-          rm -rf build/AltServerPackage
-          mkdir -p build/AltServerPackage
-
-          cp -R "$ALTSERVER_APP" build/AltServerPackage/AltServer.app
-
-          cd build/AltServerPackage
-          zip -r ../AltServer.zip AltServer.app
-
-      # ------------------------------------------------------------
-      # Print final artifacts
-      # ------------------------------------------------------------
-      - name: Show build results
-        shell: bash
-        run: |
-          echo
-          echo "=============================="
-          echo "BUILD RESULTS"
-          echo "=============================="
-
-          echo
-          echo "AltServer:"
-          ls -lh build/AltServer.zip
-
-          echo
-          echo "AltStore:"
-          ls -lh build/AltStore.ipa
-
-          echo
-          echo "AltServer architecture:"
-          find build/AltServerPackage/AltServer.app \
-            -type f \
-            -perm -111 \
-            -exec file {} \; || true
-
-          echo
-          echo "=============================="
-          echo "AltSign commits"
-          echo "=============================="
-
-          cd Dependencies/AltSign
-          git log -4 --oneline
-
-      # ------------------------------------------------------------
-      # Upload artifacts
-      # ------------------------------------------------------------
-      - name: Upload AltServer
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AltServer-macOS27-arm64
-          path: build/AltServer.zip
-          if-no-files-found: error
-
-      - name: Upload AltStore IPA
-        uses: actions/upload-artifact@v4
-        with:
-          name: AltStore-iOS
-          path: build/AltStore.ipa
-          if-no-files-found: error
+          name: AltServer
+          path: build/Build/Products/Release/AltServer.zip
+```
