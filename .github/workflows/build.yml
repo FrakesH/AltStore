@@ -1,4 +1,3 @@
-```yaml
 name: Build AltServer
 
 on:
@@ -64,4 +63,3 @@ jobs:
         with:
           name: AltServer
           path: build/Build/Products/Release/AltServer.zip
-```
