@@ -6,30 +6,53 @@ on:
 jobs:
   build:
     runs-on: macos-15
+
     steps:
-      - name: Checkout with submodules
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 0
+
+      - name: Update AltSign
+        run: |
+          cd Dependencies/AltSign
+
+          git fetch --all
+
+          git checkout notarized
+
+          git pull origin notarized
+
+          git cherry-pick ec2968c
+
+          git cherry-pick 3cd4a4a
+
+          git cherry-pick 67f90ce
 
       - name: Select Xcode 16
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '16.2'
 
-      - name: Install CocoaPods dependencies (if any)
+      - name: Install CocoaPods dependencies
         run: |
           if [ -f Podfile ]; then
             pod install --repo-update
           fi
 
-      - name: List available schemes (diagnostic)
+      - name: List available schemes
         run: |
-          xcodebuild -list -workspace AltStore.xcworkspace || xcodebuild -list -project AltStore.xcodeproj || true
+          xcodebuild -list \
+            -workspace AltStore.xcworkspace \
+            || xcodebuild -list \
+            -project AltStore.xcodeproj \
+            || true
 
-      - name: Build AltServer (unsigned)
+      - name: Build AltServer
         run: |
-          xcodebuild -workspace AltStore.xcworkspace \
+          xcodebuild \
+            -workspace AltStore.xcworkspace \
             -scheme AltServer \
             -configuration Release \
             -derivedDataPath build \
