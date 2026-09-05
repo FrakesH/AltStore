@@ -14,17 +14,13 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Use patched AltSign
+      - name: Update AltSign
         run: |
-          rm -rf Dependencies/AltSign
-
-          git clone --recursive https://github.com/Calvin-Zikakis/AltSign.git Dependencies/AltSign
-
           cd Dependencies/AltSign
 
+          git fetch --all
           git checkout notarized
-
-          git submodule update --init --recursive
+          git pull origin notarized
 
           git cherry-pick ec2968c
 
