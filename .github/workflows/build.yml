@@ -1,0 +1,45 @@
+name: Build AltServer
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Checkout with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install CocoaPods dependencies (if any)
+        run: |
+          if [ -f Podfile ]; then
+            pod install --repo-update
+          fi
+
+      - name: List available schemes (diagnostic)
+        run: |
+          xcodebuild -list -workspace AltStore.xcworkspace || xcodebuild -list -project AltStore.xcodeproj || true
+
+      - name: Build AltServer (unsigned)
+        run: |
+          xcodebuild -workspace AltStore.xcworkspace \
+            -scheme AltServer \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+
+      - name: Zip the app
+        run: |
+          cd build/Build/Products/Release
+          zip -r AltServer.zip AltServer.app
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AltServer
+          path: build/Build/Products/Release/AltServer.zip
