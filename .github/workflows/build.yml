@@ -15,9 +15,10 @@ jobs:
       - name: Swap AltSign with patched fork
         run: |
           rm -rf Dependencies/AltSign
-          git clone https://github.com/legeling/AltSign.git Dependencies/AltSign
+          git clone --recurse-submodules https://github.com/legeling/AltSign.git Dependencies/AltSign
           cd Dependencies/AltSign
           git checkout 9b06df71234804204bbbcb65ed135edd0d15b8cb
+          git submodule update --init --recursive
 
       - name: Select Xcode 16
         uses: maxim-lobanov/setup-xcode@v1
