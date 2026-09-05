@@ -16,9 +16,10 @@ jobs:
         run: |
           cd Dependencies/AltSign
 
-          git fetch --all
-
-          git checkout notarized
+          git fetch https://github.com/rileytestut/AltSign.git \
+            3cd4a4a1cafd588cab371e49609d19e694108430 \
+            67f90ce182059fbd2369efb8274f61b6f3253e35 \
+            ec2968cf6a30be2a025be809641c64eade4570aa
 
           git cherry-pick 3cd4a4a1cafd588cab371e49609d19e694108430
           git cherry-pick 67f90ce182059fbd2369efb8274f61b6f3253e35
